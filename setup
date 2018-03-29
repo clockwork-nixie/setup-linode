@@ -1,0 +1,108 @@
+#!/bin/bash
+
+################################
+# Get configuration parameters #
+################################
+
+config_domain=hekate.org.uk
+config_folder=~/.clockwork
+config_password=
+config_username=
+
+while [ -z "${config_username}" ]; do
+  read -p "Enter development username: (nixie) " config_username
+  config_username="${config_username:-nixie}"
+
+  if [ -n "`tr -d '[:alpha:]' <<< \"${config_username}\"`" ]; then
+    echo "Username must be alphabetic characters only."
+    echo
+    config_username=
+  fi
+done
+echo
+
+while [ -z "${config_password}" ]; do
+  read -p "Enter development password: " config_password
+
+  if [ -z "`tr -d '[:alnum:]' <<< \"${config_password}\"`" ]; then
+    echo "Password must be stronger than just alphanumerics."
+    echo
+    config_password=
+  elif [ ${#config_password} -lt 8 ]; then
+    echo "Password must be at least 8 characters."
+    echo
+    config_password=
+  fi
+done
+echo
+
+
+#######################################################
+# Basic environment in case we want to edit the setup #
+#######################################################
+
+echo
+echo "### Configuring Environment"
+echo
+
+git config --global user.name "Nikki Chadwick"
+git config --global user.email clockwork-nixie@gmail.com
+
+export EDITOR=/usr/bin/vi
+
+echo
+echo "### Installing NODE and NPM"
+echo
+
+curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -
+
+apt-get install -y nodejs
+apt-get install libcap2-bin
+
+setcap 'cap_net_bind_service=+ep' /usr/bin/node
+
+echo
+echo "### Installing PM2"
+echo
+
+npm install -g pm2
+
+echo
+echo "### Installing CERTBOT"
+echo
+
+apt-get install -y software-properties-common
+add-apt-repository ppa:certbot/certbot
+apt-get update
+apt-get install -y certbot 
+
+certbot certonly --standalone -d "${config_domain}"
+
+if (crontab -l 2>/dev/null | grep /usr/bin/certbot >/dev/null); then
+  echo "Certbot already in crontab: skipping."
+else
+  (crontab -l 2>/dev/null; echo "53 7,19 * * * /usr/bin/certbot renew --pre-hook \"/usr/bin/pm2 stop lucretia\" --post-hook \"/usr/bin/pm2 start lucretia\"") | crontab -
+fi
+
+##############################
+# Setup the development user #
+##############################
+
+echo
+echo "### Setting up DEV user"
+echo
+
+useradd -m ${config_username} &&
+adduser ${config_username} sudo &&
+chgrp sudo /etc/letsencrypt/live /etc/letsencrypt/archive &&
+chmod g+rx /etc/letsencrypt/live /etc/letsencrypt/archive &&
+echo "${config_username}:${config_password}" | chpasswd &&
+su - ${config_username} < ${config_folder}/user-setup
+
+
+###########
+# Cleanup #
+###########
+
+unset config_password
+unset config_username

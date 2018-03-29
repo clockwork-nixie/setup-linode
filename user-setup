@@ -1,0 +1,40 @@
+#!/bin/bash
+
+config_project=lucretia
+config_name="Nikki Chadwick"
+config_email=clockwork-nixie@gmail.com
+
+cd
+
+git config --global user.name "${config_name}"
+git config --global user.email "${config_email}"
+
+echo
+
+if grep '^[ 	]*export[ 	][ 	]*EDITOR=' ~/.profile >>/dev/null; then
+  echo "Default editor already set and exported: skipping."
+else
+  echo "Setting default editor in profile."
+  echo "export EDITOR=/usr/bin/vi" >>~/.profile
+fi
+echo
+
+if [ -d "${config_project}" ]; then
+  echo "Source folder ${config_project} already exists: not fetching."
+else
+  echo "Fetching project ${config_project}"
+  git clone https://github.com/clockwork-nixie/${config_project}
+  cd "${config_project}"
+  git remote set-url --push origin "git@github.com:clockwork-nixie/${config_project}.git"
+  cd ..
+fi
+echo
+
+if [ -f ~/.ssh/id_rsa ] && grep "${config_email}" ~/.ssh/id_rsa.pub >> /dev/null; then
+  echo "SSH key already set for ${config_email}: skipping."
+else
+  ssh-keygen -q -b 2048 -t rsa -C "${config_email}" -f ~/.ssh/id_rsa
+fi
+echo
+
+exit 0
